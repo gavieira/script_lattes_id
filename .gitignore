@@ -1,1 +1,7 @@
 resultados_lattes_ids.csv
+checkpoint.csv
+conversao_lattes.log
+converte_id_lattes.py
+debug_html/
+lattes_unificado.log
+scraper_lattes.py

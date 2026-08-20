@@ -12,6 +12,7 @@ import logging
 import os
 import random
 import re
+import shutil
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -19,7 +20,11 @@ from typing import Optional
 import pandas as pd
 from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+    NoSuchElementException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support import expected_conditions as EC
@@ -60,10 +65,14 @@ class ResultadoConversao:
 def executar_extracao_ids(driver_path: str, arquivo_intermediario: str):
     logger.info("=== INICIANDO ETAPA 1: EXTRAÇÃO DE IDs REDUZIDOS ===")
     options = webdriver.FirefoxOptions()
-    # Para a busca inicial não usamos headless pois o usuário precisa resolver o CAPTCHA
     
+    # Resolve driver_path
     if not os.path.exists(driver_path):
-        raise FileNotFoundError(f"geckodriver não encontrado em: {driver_path}")
+        resolved = shutil.which(driver_path)
+        if resolved:
+            driver_path = resolved
+        else:
+            raise FileNotFoundError(f"geckodriver não encontrado em '{driver_path}' nem no PATH do sistema.")
 
     service = Service(driver_path)
     driver = webdriver.Firefox(service=service, options=options)
@@ -89,7 +98,7 @@ def executar_extracao_ids(driver_path: str, arquivo_intermediario: str):
         total_registros = int(match_total.group(1))
         logger.info(f"[OK] Total de pesquisadores na busca: {total_registros}")
         
-        passo = 100 
+        passo = 300 
         
         for inicio in range(0, total_registros, passo):
             fim_esperado = min(inicio + passo, total_registros)
@@ -141,7 +150,6 @@ def executar_extracao_ids(driver_path: str, arquivo_intermediario: str):
     finally:
         driver.quit()
 
-    # Consolidação e salvamento intermediário
     df = pd.DataFrame(dados_pesquisadores)
     if not df.empty:
         df_limpo = df.drop_duplicates(subset=['id_reduzido']).reset_index(drop=True)
@@ -149,14 +157,9 @@ def executar_extracao_ids(driver_path: str, arquivo_intermediario: str):
         df_limpo.to_csv(arquivo_intermediario, index=False, encoding='utf-8-sig')
         
         if total_capturado != total_registros:
-            logger.warning(
-                f"[!] Falha de integridade: Esperado {total_registros}, Capturado {total_capturado}. "
-                f"Dados parciais salvos em {arquivo_intermediario}."
-            )
+            logger.warning(f"[!] Falha de integridade: Esperado {total_registros}, Capturado {total_capturado}.")
         
         logger.info("=== ETAPA 1 FINALIZADA COM SUCESSO ===")
-        logger.info(f"Total esperado: {total_registros} | Total capturado: {total_capturado}")
-        logger.info(f"Arquivo intermediário gerado: '{arquivo_intermediario}'")
         return df_limpo
     else:
         logger.error("Nenhum registro capturado.")
@@ -168,7 +171,7 @@ def executar_extracao_ids(driver_path: str, arquivo_intermediario: str):
 # ==========================================
 class ConversorLattes:
     def __init__(self, driver_path: str, headless: bool = True, sleep_time: float = 3.0,
-                 max_tentativas: int = 3, checkpoint_path: str = "checkpoint.csv"):
+                 max_tentativas: int = 10, checkpoint_path: str = "checkpoint.csv"):
         self.driver_path = driver_path
         self.headless = headless
         self.sleep_time = sleep_time
@@ -192,17 +195,75 @@ class ConversorLattes:
         options.set_preference("useAutomationExtension", False)
         options.set_preference("permissions.default.image", 2)
 
+        if not os.path.exists(self.driver_path):
+            resolved = shutil.which(self.driver_path)
+            if resolved:
+                self.driver_path = resolved
+            else:
+                raise FileNotFoundError(
+                    f"geckodriver não encontrado em '{self.driver_path}' nem no PATH do sistema."
+                )
+
         service = Service(self.driver_path)
         self.driver = webdriver.Firefox(service=service, options=options)
         self.driver.set_page_load_timeout(30)
 
-    def _extrair_id16_da_pagina(self) -> Optional[str]:
-        html = self.driver.page_source
+    @staticmethod
+    def _buscar_id16_no_html(html: str) -> Optional[str]:
+        # Tenta estratégia da tag <span>
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            span = soup.find("span", attrs={"style": "font-weight: bold; color: #326C99;"})
+            if span:
+                texto = span.get_text(strip=True)
+                if texto.isdigit() and len(texto) == 16:
+                    return texto
+                digitos = re.sub(r"\D", "", texto)
+                if len(digitos) == 16:
+                    return digitos
+        except Exception:
+            pass 
+
+        # Tenta por URL ou número solto
         match = re.search(r"lattes\.cnpq\.br/(\d{16})", html)
         if match: return match.group(1)
         match = ID16_PATTERN.search(html)
         if match: return match.group(1)
+        
         return None
+
+    def _extrair_id16_da_pagina(self) -> Optional[str]:
+        id16 = self._buscar_id16_no_html(self.driver.page_source)
+        if id16: return id16
+
+        # Tenta buscar dentro de iframes
+        try:
+            iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+            for idx in range(len(iframes)):
+                try:
+                    iframes = self.driver.find_elements(By.TAG_NAME, "iframe") 
+                    self.driver.switch_to.frame(iframes[idx])
+                    id16 = self._buscar_id16_no_html(self.driver.page_source)
+                    self.driver.switch_to.default_content()
+                    if id16:
+                        return id16
+                except (NoSuchElementException, WebDriverException, IndexError):
+                    self.driver.switch_to.default_content()
+                    continue
+        except WebDriverException:
+            pass
+
+        return None
+
+    def _salvar_html_debug(self, id_reduzido: str):
+        try:
+            os.makedirs("debug_html", exist_ok=True)
+            caminho = os.path.join("debug_html", f"{id_reduzido}.html")
+            with open(caminho, "w", encoding="utf-8") as f:
+                f.write(self.driver.page_source)
+            logger.info(f"[{id_reduzido}] HTML de debug salvo em: {caminho}")
+        except Exception as e:
+            logger.warning(f"[{id_reduzido}] Não foi possível salvar HTML de debug: {e}")
 
     def converter_um(self, id_reduzido: str) -> ResultadoConversao:
         resultado = ResultadoConversao(id_reduzido=id_reduzido)
@@ -232,7 +293,7 @@ class ConversorLattes:
                     resultado.status = "ok"
                     logger.info(f"[{id_reduzido}] -> {id16} (tentativa {tentativa})")
                 else:
-                    time.sleep(2)
+                    time.sleep(3)
                     id16 = self._extrair_id16_da_pagina()
                     if id16:
                         resultado.id_16 = id16
@@ -240,7 +301,12 @@ class ConversorLattes:
                         logger.info(f"[{id_reduzido}] -> {id16} (retry interno)")
                     else:
                         resultado.status = "nao_encontrado"
-                        logger.warning(f"[{id_reduzido}] ID de 16 dígitos não encontrado.")
+                        logger.warning(f"[{id_reduzido}] ID de 16 dígitos não encontrado na página.")
+                    
+                        # Só salva o HTML de debug se todas as tentativas tiverem se esgotado
+                        if tentativa == self.max_tentativas:
+                            self._salvar_html_debug(id_reduzido)
+                            logger.error(f"[{id_reduzido}] Esgotadas as {self.max_tentativas} tentativas. ID não convertido.")
 
                 self._fechar_abas_extras()
                 if resultado.status == "ok":
@@ -267,22 +333,40 @@ class ConversorLattes:
             self.driver.switch_to.window(principal)
 
     def converter_lote(self, ids_reduzidos: list, delay_entre_requisicoes: tuple = (2.0, 4.0)):
-        resultados = []
-        ja_processados = self._carregar_checkpoint()
+            import random
 
-        for i, id_reduzido in enumerate(ids_reduzidos, start=1):
-            if id_reduzido in ja_processados:
-                logger.info(f"[{i}/{len(ids_reduzidos)}] {id_reduzido} já processado (no checkpoint).")
-                resultados.append(ja_processados[id_reduzido])
-                continue
+            resultados = []
+            ja_processados = self._carregar_checkpoint()
 
-            logger.info(f"[{i}/{len(ids_reduzidos)}] Processando {id_reduzido}...")
-            resultado = self.converter_um(id_reduzido)
-            resultados.append(resultado)
-            self._salvar_checkpoint_incremental(resultado)
-            time.sleep(random.uniform(*delay_entre_requisicoes))
+            for i, id_reduzido in enumerate(ids_reduzidos, start=1):
 
-        return resultados
+                # NOTA SOBRE IDs DUPLICADOS NO CHECKPOINT:
+                # Como salvamos em modo "append" (adicionando no fim do arquivo), 
+                # retentativas geram linhas duplicadas no CSV. Isso não é problema!
+                # A função _carregar_checkpoint() lê o CSV de cima para baixo 
+                # e salva num dicionário Python. Logo, o registro mais recente (último) 
+                # sobrescreve automaticamente o antigo na memória.
+
+                if id_reduzido in ja_processados:
+                    status_anterior = ja_processados[id_reduzido].status
+
+                    # Só pula se o status da execução anterior for sucesso absoluto
+                    if status_anterior == "ok":
+                        logger.info(f"[{i}/{len(ids_reduzidos)}] {id_reduzido} já processado com sucesso ('ok'). Pulando.")
+                        resultados.append(ja_processados[id_reduzido])
+                        continue
+                    else:
+                        logger.info(f"[{i}/{len(ids_reduzidos)}] {id_reduzido} teve status '{status_anterior}' antes. Tentando novamente a conversão...")
+
+                logger.info(f"[{i}/{len(ids_reduzidos)}] Processando {id_reduzido}...")
+                resultado = self.converter_um(id_reduzido)
+                resultados.append(resultado)
+
+                # Salva a nova tentativa no fim do CSV e pausa
+                self._salvar_checkpoint_incremental(resultado)
+                time.sleep(random.uniform(*delay_entre_requisicoes))
+
+            return resultados
 
     def _carregar_checkpoint(self) -> dict:
         if not os.path.exists(self.checkpoint_path):
@@ -314,19 +398,16 @@ class ConversorLattes:
 def main():
     parser = argparse.ArgumentParser(description="Ferramenta Unificada: Scraper e Conversor Lattes")
     
-    # Parâmetros padrão solicitados
-    parser.add_argument("--input", default="resultados_lattes_ids.csv", help="Arquivo intermediário/entrada CSV (padrão: resultados_lattes_ids.csv)")
-    parser.add_argument("--output", default="ids_convertidos.csv", help="Arquivo final de saída CSV (padrão: ids_convertidos.csv)")
-    parser.add_argument("--driver-path", default="/usr/bin/geckodriver", help="Caminho para o geckodriver (padrão: /usr/bin/geckodriver)")
+    parser.add_argument("--input", default="resultados_lattes_ids.csv", help="Arquivo intermediário/entrada CSV")
+    parser.add_argument("--output", default="ids_convertidos.csv", help="Arquivo final de saída CSV")
+    parser.add_argument("--driver-path", default="/usr/bin/geckodriver", help="Caminho para o geckodriver")
     
-    # Opções extras de controle
-    parser.add_argument("--apenas-converter", action="store_true", help="Pula a etapa 1 de busca manual e vai direto para a conversão lendo o --input")
-    parser.add_argument("--sleep", type=float, default=3.0, help="Tempo de espera após abrir CV na conversão (segundos)")
+    parser.add_argument("--apenas-converter", action="store_true", help="Pula a etapa 1 de busca manual e vai direto para a conversão")
+    parser.add_argument("--sleep", type=float, default=4.0, help="Tempo de espera após abrir CV na conversão (segundos)")
     parser.add_argument("--checkpoint", default="checkpoint.csv", help="Arquivo de checkpoint")
 
     args = parser.parse_args()
 
-    # ETAPA 1: Extração
     if not args.apenas_converter:
         df_extracao = executar_extracao_ids(args.driver_path, args.input)
     else:
@@ -336,39 +417,32 @@ def main():
             exit(1)
         df_extracao = pd.read_csv(args.input)
 
-    # Extrai apenas os IDs da coluna para passar pro conversor
     if 'id_reduzido' not in df_extracao.columns:
-        logger.error(f"Coluna 'id_reduzido' não encontrada no DataFrame/Arquivo. Colunas: {df_extracao.columns}")
+        logger.error(f"Coluna 'id_reduzido' não encontrada. Colunas: {df_extracao.columns}")
         exit(1)
         
     ids_para_converter = df_extracao['id_reduzido'].dropna().astype(str).tolist()
 
-    # ETAPA 2: Conversão
     logger.info("=== INICIANDO ETAPA 2: CONVERSÃO DE IDs REDUZIDOS PARA 16 DÍGITOS ===")
     with ConversorLattes(
         driver_path=args.driver_path,
-        headless=True,  # Conversão sempre em background
+        headless=True,
         sleep_time=args.sleep,
         checkpoint_path=args.checkpoint,
     ) as conversor:
         resultados = conversor.converter_lote(ids_para_converter)
 
-    # MESCLAGEM DOS DADOS PARA O CSV FINAL
     logger.info("Mesclando nomes capturados com os novos IDs convertidos...")
     df_resultados = pd.DataFrame([vars(r) for r in resultados])
     
-    # Remove a coluna detalhes_extras que é apenas dicionário interno vazio no momento
     if 'detalhes_extras' in df_resultados.columns:
         df_resultados = df_resultados.drop(columns=['detalhes_extras'])
     
-    # Faz um JOIN pelo 'id_reduzido' para manter o NOME no arquivo final
     df_final = pd.merge(df_extracao, df_resultados, on='id_reduzido', how='left')
 
-    # Reordenando colunas para ficar bonito: id_reduzido, nome, id_16, status, tentativas
     colunas_ordenadas = ['id_reduzido', 'nome', 'id_16', 'status', 'tentativas']
     df_final = df_final[[c for c in colunas_ordenadas if c in df_final.columns]]
 
-    # Salva o resultado
     df_final.to_csv(args.output, index=False, encoding='utf-8-sig')
     
     total = len(df_final)
@@ -376,8 +450,9 @@ def main():
     
     print("\n" + "="*60)
     print("PROCESSO FINALIZADO COM SUCESSO!")
-    print(f"IDs extraídos/lidos: {total}")
-    print(f"IDs convertidos p/ 16 dígitos: {ok}")
+    print(f"IDs processados: {total}")
+    print(f"Convertidos p/ 16 dígitos: {ok}")
+    print(f"Erros de HTML salvos em: ./debug_html/")
     print(f"Arquivo final gerado: {args.output}")
     print("="*60 + "\n")
 
