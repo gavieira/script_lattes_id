@@ -255,15 +255,6 @@ class ConversorLattes:
 
         return None
 
-    def _salvar_html_debug(self, id_reduzido: str):
-        try:
-            os.makedirs("debug_html", exist_ok=True)
-            caminho = os.path.join("debug_html", f"{id_reduzido}.html")
-            with open(caminho, "w", encoding="utf-8") as f:
-                f.write(self.driver.page_source)
-            logger.info(f"[{id_reduzido}] HTML de debug salvo em: {caminho}")
-        except Exception as e:
-            logger.warning(f"[{id_reduzido}] Não foi possível salvar HTML de debug: {e}")
 
     def converter_um(self, id_reduzido: str) -> ResultadoConversao:
         resultado = ResultadoConversao(id_reduzido=id_reduzido)
@@ -302,11 +293,6 @@ class ConversorLattes:
                     else:
                         resultado.status = "nao_encontrado"
                         logger.warning(f"[{id_reduzido}] ID de 16 dígitos não encontrado na página.")
-                    
-                        # Só salva o HTML de debug se todas as tentativas tiverem se esgotado
-                        if tentativa == self.max_tentativas:
-                            self._salvar_html_debug(id_reduzido)
-                            logger.error(f"[{id_reduzido}] Esgotadas as {self.max_tentativas} tentativas. ID não convertido.")
 
                 self._fechar_abas_extras()
                 if resultado.status == "ok":
