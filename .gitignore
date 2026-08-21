@@ -1,7 +1,15 @@
+# Ambiente virtual Python
+venv/
+
+# Arquivos gerados pelo script
 resultados_lattes_ids.csv
 checkpoint.csv
-conversao_lattes.log
-converte_id_lattes.py
-debug_html/
+ids_convertidos.csv
 lattes_unificado.log
-scraper_lattes.py
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+
+# Outros arquivos locais
+.env

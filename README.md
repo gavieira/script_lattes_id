@@ -1,132 +1,455 @@
-# 🚀 Extrator e Conversor Lattes 
+# 🚀 Extrator e Conversor Lattes
 
-Esta ferramenta automatiza o processo de raspagem (web scraping) e conversão de IDs da Plataforma Lattes (CNPq). O script atua em duas etapas integradas:
-1. **Extração:** Coleta os nomes e "IDs reduzidos" (id10) de pesquisadores diretamente da página de Busca Textual do CNPq.
-2. **Conversão:** Acessa os currículos de forma invisível (*headless*) e extrai o ID oficial de 16 dígitos (id16) correspondente a cada pesquisador.
+Esta ferramenta automatiza o processo de raspagem (*web scraping*) e conversão de IDs da Plataforma Lattes (CNPq).
+
+O script atua em duas etapas integradas:
+
+1. **Extração:** coleta os nomes e os **IDs reduzidos (id10)** de pesquisadores diretamente da página de Busca Textual do CNPq.
+2. **Conversão:** acessa os currículos de forma invisível (*headless*) e extrai o **ID oficial de 16 dígitos (id16)** correspondente a cada pesquisador.
 
 ---
 
 ## 📋 Pré-requisitos
 
 Para rodar este script, você precisará ter instalado em sua máquina:
+
+* **Git**
 * **Python 3.8+**
 * **Navegador Mozilla Firefox**
-* **Geckodriver** (Motor que permite ao Python controlar o Firefox)
+* **Geckodriver** — motor que permite ao Python controlar o Firefox
 
-### Instalação do Firefox e Geckodriver
+---
 
-**No Linux (Debian/Ubuntu/Xubuntu):**
+## 📥 Instalação
+
+### 1. Clone o repositório
+
+Clone o repositório para sua máquina:
+
+```bash
+git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
+```
+
+Entre no diretório do projeto:
+
+```bash
+cd SEU_REPOSITORIO
+```
+
+> Substitua `SEU_USUARIO/SEU_REPOSITORIO` pela URL real do repositório.
+
+---
+
+### 2. Instale o Firefox e o Geckodriver
+
+#### Linux (Debian/Ubuntu/Xubuntu)
+
 ```bash
 sudo apt update
 sudo apt install firefox firefox-geckodriver
+```
 
-No Linux (Arch/CachyOS/Manjaro):
-Bash
+#### Linux (Arch/CachyOS/Manjaro)
 
+```bash
 sudo pacman -S firefox geckodriver
+```
 
-No Windows / macOS:
+#### Windows / macOS
 
-    Instale o Firefox.
+1. Instale o Firefox.
+2. Baixe a versão mais recente do Geckodriver.
+3. Extraia o executável.
+4. Adicione o executável ao `PATH` do sistema.
 
-    Baixe a versão mais recente do Geckodriver.
+Alternativamente, você pode informar o caminho diretamente ao executar o script usando a opção `--driver-path`.
 
-    Extraia o executável e adicione-o ao PATH do seu sistema (ou aponte o caminho diretamente na hora de rodar o script usando a flag --driver-path).
+---
 
-🛠️ Instalação do Ambiente Python
+### 3. Crie o ambiente virtual
 
-É altamente recomendado o uso de um ambiente virtual (venv) para evitar conflitos de bibliotecas.
+É recomendado utilizar um ambiente virtual (`venv`) para evitar conflitos entre bibliotecas Python.
 
-    Crie o ambiente virtual:
+O ambiente virtual será criado **dentro do próprio diretório do repositório**:
 
-Bash
+```bash
+python3 -m venv venv
+```
+
+Após esse comando, a estrutura básica do projeto será semelhante a:
+
+```text
+SEU_REPOSITORIO/
+├── venv/
+├── README.md
+├── requirements.txt
+└── lattes_extrator_unificado.py
+```
+
+> O diretório `venv/` é um ambiente local e não deve ser versionado pelo Git.
+
+---
+
+### 4. Ative o ambiente virtual
+
+#### Linux/macOS
+
+```bash
+source venv/bin/activate
+```
+
+#### Windows
+
+```bat
+venv\Scripts\activate
+```
+
+Após a ativação, o terminal normalmente exibirá algo semelhante a:
+
+```text
+(venv) usuario@computador:~/SEU_REPOSITORIO$
+```
+
+---
+
+### 5. Instale as dependências
+
+Com o ambiente virtual ativado, instale todas as dependências do projeto utilizando o `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+As principais dependências são:
+
+* `pandas`
+* `beautifulsoup4`
+* `selenium`
+
+O arquivo `requirements.txt` contém a lista oficial de dependências necessárias para executar o projeto.
+
+---
+
+## 🚀 Como usar
+
+### Fluxo completo — Extração + Conversão
+
+Para iniciar o processo do zero, execute:
+
+```bash
+python lattes_extrator_unificado.py
+```
+
+O processo ocorrerá em duas etapas.
+
+### Etapa 1 — Extração
+
+O Firefox será aberto automaticamente.
+
+1. Vá até a janela do navegador.
+2. Preencha os filtros desejados na **Busca Textual do CNPq**.
+3. Clique em buscar.
+4. Resolva o CAPTCHA manualmente.
+5. Assim que a primeira página de resultados aparecer, volte ao terminal.
+6. Pressione **ENTER**.
+
+A partir desse momento, o script assumirá o controle do navegador.
+
+Ele irá:
+
+* percorrer as páginas de resultados;
+* extrair os nomes dos pesquisadores;
+* extrair os respectivos IDs reduzidos (`id10`);
+* salvar os resultados em `resultados_lattes_ids.csv`.
+
+Ao finalizar a extração, o navegador será fechado automaticamente.
+
+---
+
+### Etapa 2 — Conversão
+
+Depois da extração, o script inicia automaticamente a conversão dos IDs reduzidos.
+
+Nesta etapa, o Firefox é executado em modo **headless**, ou seja, sem abrir uma janela visível.
+
+Para cada pesquisador, o script:
+
+1. acessa o currículo Lattes correspondente;
+2. identifica o ID oficial de 16 dígitos (`id16`);
+3. registra o resultado;
+4. salva o progresso no arquivo `checkpoint.csv`.
+
+Ao final, os resultados estarão disponíveis em:
+
+```text
+ids_convertidos.csv
+```
+
+---
+
+## 🔄 Fluxo parcial — Apenas conversão
+
+Se você já possui um arquivo com IDs reduzidos, ou se a etapa de extração foi interrompida e você deseja continuar apenas com os dados já salvos em `resultados_lattes_ids.csv`, utilize:
+
+```bash
+python lattes_extrator_unificado.py --apenas-converter
+```
+
+Nesse modo, a etapa de extração não será executada.
+
+O script utilizará diretamente:
+
+```text
+resultados_lattes_ids.csv
+```
+
+como entrada para a conversão.
+
+---
+
+## ⚙️ Parâmetros disponíveis
+
+O comportamento do script pode ser personalizado por meio das seguintes opções:
+
+| Opção                | Descrição                                                                | Padrão                      |
+| -------------------- | ------------------------------------------------------------------------ | --------------------------- |
+| `--input`            | Define o arquivo de entrada utilizado na conversão.                      | `resultados_lattes_ids.csv` |
+| `--output`           | Define o nome do arquivo final.                                          | `ids_convertidos.csv`       |
+| `--driver-path`      | Define o caminho do executável do Geckodriver.                           | `/usr/bin/geckodriver`      |
+| `--sleep`            | Define o tempo, em segundos, aguardado para o carregamento do currículo. | `4.0`                       |
+| `--apenas-converter` | Executa somente a etapa de conversão.                                    | Desativado                  |
+
+### Exemplo
+
+Para utilizar outro arquivo de entrada e aumentar o tempo de espera para 6 segundos:
+
+```bash
+python lattes_extrator_unificado.py \
+    --apenas-converter \
+    --input meus_dados.csv \
+    --sleep 6.0
+```
+
+### Utilizando um Geckodriver em outro local
+
+Caso o Geckodriver não esteja no `PATH` do sistema:
+
+```bash
+python lattes_extrator_unificado.py \
+    --driver-path /caminho/para/geckodriver
+```
+
+Por exemplo:
+
+```bash
+python lattes_extrator_unificado.py \
+    --driver-path /usr/local/bin/geckodriver
+```
+
+---
+
+## 💾 Sistema de Checkpoint
+
+O script possui um sistema automático de checkpoint para permitir a retomada da conversão.
+
+Durante a **Etapa 2**, cada tentativa é registrada no arquivo:
+
+```text
+checkpoint.csv
+```
+
+### ⏯️ Retomada automática
+
+O processamento pode ser interrompido a qualquer momento pressionando:
+
+```text
+Ctrl+C
+```
+
+Ao executar o script novamente, ele verificará o `checkpoint.csv`.
+
+Os IDs que já foram convertidos com sucesso serão ignorados, permitindo que o processamento continue de onde parou.
+
+Isso é especialmente útil para processamentos grandes ou quando a conexão com o CNPq apresenta instabilidades.
+
+---
+
+### ⚠️ Tratamento de erros
+
+Caso uma tentativa de conversão falhe, por exemplo devido a:
+
+* perda de conexão;
+* erro no carregamento da página;
+* indisponibilidade temporária do CNPq;
+* currículo não encontrado;
+
+o resultado será registrado no checkpoint.
+
+IDs que apresentarem determinados status de erro, como:
+
+```text
+erro
+nao_encontrado
+```
+
+poderão ser novamente processados em uma execução posterior.
+
+Dessa forma, o script evita repetir desnecessariamente as conversões que já foram realizadas com sucesso.
+
+---
+
+### 🔄 Começar a conversão do zero
+
+Para ignorar o histórico existente e reprocessar todos os IDs, apague o arquivo:
+
+```text
+checkpoint.csv
+```
+
+antes de executar novamente o script.
+
+> **Atenção:** apagar o `checkpoint.csv` fará com que o histórico de processamento seja perdido.
+
+---
+
+## 📁 Arquivos gerados
+
+Durante a execução, o script gera os seguintes arquivos:
+
+| Arquivo                     | Descrição                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `resultados_lattes_ids.csv` | Arquivo criado na **Etapa 1**, contendo os nomes e IDs reduzidos (`id10`) dos pesquisadores. |
+| `checkpoint.csv`            | Arquivo utilizado para salvar automaticamente o progresso da conversão.                      |
+| `ids_convertidos.csv`       | Arquivo final contendo nome, ID reduzido, ID de 16 dígitos e status da operação.             |
+| `lattes_unificado.log`      | Arquivo de log contendo o histórico da execução para auditoria e *debug*.                    |
+
+---
+
+## 🔁 Fluxo do processamento
+
+O funcionamento geral da ferramenta pode ser representado da seguinte maneira:
+
+```text
+Busca Textual do CNPq
+        │
+        ▼
+┌─────────────────────────┐
+│ Extração dos resultados │
+└─────────────────────────┘
+        │
+        ▼
+resultados_lattes_ids.csv
+        │
+        ▼
+┌─────────────────────────┐
+│ Conversão dos IDs id10  │
+│ para IDs oficiais id16  │
+└─────────────────────────┘
+        │
+        ├──────────────► checkpoint.csv
+        │
+        ▼
+ids_convertidos.csv
+```
+
+O `checkpoint.csv` funciona como ponto de retomada da segunda etapa do processamento.
+
+---
+
+## 🗂️ Estrutura do projeto
+
+A estrutura esperada do repositório é:
+
+```text
+SEU_REPOSITORIO/
+│
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── lattes_extrator_unificado.py
+│
+└── venv/
+    └── ...
+```
+
+O diretório `venv/` existe apenas na máquina local e **não deve ser enviado para o repositório Git**.
+
+Os arquivos gerados durante a execução também são arquivos locais e devem permanecer fora do controle de versão.
+
+---
+
+## 🧹 `.gitignore`
+
+Recomenda-se utilizar um `.gitignore` semelhante ao seguinte:
+
+```gitignore
+# Ambiente virtual Python
+venv/
+
+# Arquivos gerados pelo script
+resultados_lattes_ids.csv
+checkpoint.csv
+ids_convertidos.csv
+lattes_unificado.log
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+
+# Arquivos de configuração locais
+.env
+```
+
+---
+
+## 🔧 Atualizando o projeto
+
+Caso uma nova versão do script seja disponibilizada no repositório, primeiro atualize os arquivos:
+
+```bash
+git pull
+```
+
+Depois, com o ambiente virtual ativado, atualize as dependências:
+
+```bash
+pip install -r requirements.txt
+```
+
+Isso garante que eventuais novas bibliotecas adicionadas ao projeto sejam instaladas.
+
+---
+
+## 📌 Resumo da instalação
+
+Em uma máquina Linux, depois de instalar o Git, Firefox e Geckodriver, a instalação completa pode ser feita com:
+
+```bash
+git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
+cd SEU_REPOSITORIO
 
 python3 -m venv venv
+source venv/bin/activate
 
-    Ative o ambiente virtual:
+pip install -r requirements.txt
+```
 
-    Linux/macOS:
-    Bash
+Depois, execute:
 
-    source venv/bin/activate
-
-    Windows:
-    DOS
-
-    venv\Scripts\activate
-
-    Instale as dependências necessárias:
-
-Bash
-
-pip install pandas beautifulsoup4 selenium
-
-🚀 Como usar
-Fluxo Completo (Extração + Conversão)
-
-Para iniciar o processo do zero, basta executar o script sem argumentos:
-Bash
-
+```bash
 python lattes_extrator_unificado.py
+```
 
-O que vai acontecer:
+---
 
-    O Firefox será aberto automaticamente.
+## 📄 Licença
 
-    Vá até a janela do navegador, preencha os filtros desejados na Busca Textual e clique em buscar.
+Este projeto é distribuído sob os termos da GNU General Public License v3.0 (GPL-3.0).
 
-    Resolva o CAPTCHA manualmente.
+Você pode usar, copiar, modificar e redistribuir este software, desde que respeite os termos estabelecidos pela licença.
 
-    Assim que a primeira página de resultados aparecer, volte ao terminal e pressione ENTER.
+Uma cópia da licença deve acompanhar este projeto no arquivo LICENSE.
 
-    O script assumirá o controle, paginando os resultados e extraindo os IDs reduzidos.
+Para consultar o texto completo da licença, acesse:
 
-    Ao finalizar a extração, o script fechará o navegador e iniciará a conversão em modo invisível, salvando o progresso continuamente.
-
-Fluxo Parcial (Apenas Conversão)
-
-Se você já possui um arquivo com os IDs reduzidos (ou se a extração parou no meio e você quer converter apenas o que já foi salvo no arquivo resultados_lattes_ids.csv), use a flag --apenas-converter:
-Bash
-
-python lattes_extrator_unificado.py --apenas-converter
-
-Outros Parâmetros Úteis
-
-Você pode customizar o comportamento do script com as seguintes flags:
-
-    --input: Define um arquivo de entrada diferente (Padrão: resultados_lattes_ids.csv).
-
-    --output: Define o nome do arquivo final (Padrão: ids_convertidos.csv).
-
-    --driver-path: Aponta o caminho exato do geckodriver, caso ele não esteja no PATH global (Padrão: /usr/bin/geckodriver).
-
-    --sleep: Define o tempo (em segundos) que o script aguarda a página do currículo carregar antes de extrair o ID de 16 dígitos (Padrão: 4.0). Aumente esse valor se a sua internet estiver lenta.
-
-Exemplo de uso avançado:
-Bash
-
-python lattes_extrator_unificado.py --apenas-converter --input meus_dados.csv --sleep 6.0
-
-💾 Sistema de Checkpoint (Save Automático)
-
-O script possui um sistema inteligente de retomada de tarefas.
-Durante a Etapa 2 (Conversão), cada tentativa é salva instantaneamente no arquivo checkpoint.csv.
-
-    Pode parar sem medo: Você pode interromper o script a qualquer momento pressionando Ctrl+C. Ao rodar o comando novamente, ele lerá o checkpoint.csv e pulará todos os IDs que já foram convertidos com sucesso.
-
-    Tratamento de Erros: Se a conexão cair ou a página do CNPq der erro (status erro ou nao_encontrado), ao reiniciar o script, ele tentará converter novamente os IDs que falharam anteriormente, garantindo a maior taxa de sucesso possível.
-
-    Para começar do zero: Se desejar ignorar o histórico e reprocessar todos os IDs, basta apagar o arquivo checkpoint.csv antes de iniciar.
-
-📁 Arquivos Gerados
-
-Ao longo da execução, o script gera os seguintes arquivos na pasta raiz:
-
-    resultados_lattes_ids.csv: Arquivo temporário criado na Etapa 1 contendo o nome e o ID reduzido.
-
-    checkpoint.csv: Arquivo de log e save automático da conversão.
-
-    ids_convertidos.csv: O arquivo final. Contém o nome, o ID reduzido, o ID de 16 dígitos convertido e o status da operação.
-
-    lattes_unificado.log: Arquivo de texto contendo todo o histórico do terminal para auditoria ou debug.
-
+https://www.gnu.org/licenses/gpl-3.0.html
