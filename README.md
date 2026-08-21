@@ -149,7 +149,7 @@ O Firefox será aberto automaticamente.
 1. Vá até a janela do navegador.
 2. Preencha os filtros desejados na **Busca Textual do CNPq**.
 3. Clique em buscar.
-4. Resolva o CAPTCHA manualmente.
+4. Resolva o CAPTCHA manualmente (se for requisitado).
 5. Assim que a primeira página de resultados aparecer, volte ao terminal.
 6. Pressione **ENTER**.
 
@@ -361,7 +361,7 @@ O `checkpoint.csv` funciona como ponto de retomada da segunda etapa do processam
 A estrutura esperada do repositório é:
 
 ```text
-SEU_REPOSITORIO/
+script_lattes_id/
 │
 ├── .gitignore
 ├── README.md
@@ -425,8 +425,8 @@ Isso garante que eventuais novas bibliotecas adicionadas ao projeto sejam instal
 Em uma máquina Linux, depois de instalar o Git, Firefox e Geckodriver, a instalação completa pode ser feita com:
 
 ```bash
-git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
-cd SEU_REPOSITORIO
+git clone https://github.com/gavieira/script_lattes_id.git
+cd script_lattes_id 
 
 python3 -m venv venv
 source venv/bin/activate
@@ -442,13 +442,25 @@ python lattes_extrator_unificado.py
 
 ---
 
+## 🤖 Uso de Inteligência Artificial
+
+O desenvolvimento deste projeto contou com o auxílio de ferramentas de **Inteligência Artificial (IA)**.
+
+A IA foi utilizada como ferramenta de apoio durante o desenvolvimento, incluindo atividades como:
+
+* elaboração e revisão de código;
+* identificação e correção de erros;
+* desenvolvimento e aprimoramento de funcionalidades;
+* documentação e organização do projeto.
+
+O código foi revisado, adaptado e integrado pelo autor do projeto. A utilização de ferramentas de IA não implica atribuição de autoria ou responsabilidade a essas ferramentas.
+
+
 ## 📄 Licença
 
 Este projeto é distribuído sob os termos da GNU General Public License v3.0 (GPL-3.0).
 
 Você pode usar, copiar, modificar e redistribuir este software, desde que respeite os termos estabelecidos pela licença.
-
-Uma cópia da licença deve acompanhar este projeto no arquivo LICENSE.
 
 Para consultar o texto completo da licença, acesse:
 
